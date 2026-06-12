@@ -1,0 +1,2 @@
+pymupdf4llm>=1.27
+tkinterdnd2>=0.4
