@@ -15,7 +15,54 @@ import sys
 from pathlib import Path
 from urllib.parse import unquote
 
+import pymupdf
 import pymupdf4llm
+from pymupdf4llm.helpers import utils as _pymupdf4llm_utils
+
+
+def _expand_pictures(page) -> None:
+    """レイアウトモデルが検出したpicture範囲を、つながったベクター線画まで広げる。
+
+    pymupdf4llm 1.27のレイアウト検出は回路図などの線画の範囲を小さく見積もり、
+    抽出画像が切り取られることがある（上流バグの回避策）。
+    """
+    table_boxes = [pymupdf.Rect(b[:4]) for b in page.layout_information if b[4] == "table"]
+    rects = []
+    for d in page.get_drawings():
+        r = d["rect"]
+        # 空、ページ幅いっぱいの罫線・下線、表の枠線は対象外
+        if r.is_empty or r.width > page.rect.width * 0.8:
+            continue
+        if any(r.intersects(t) for t in table_boxes):
+            continue
+        rects.append(r)
+
+    max_area = abs(page.rect) * 0.6
+    for i, box in enumerate(page.layout_information):
+        if box[4] != "picture":
+            continue
+        grown = pymupdf.Rect(box[:4])
+        changed = True
+        while changed:
+            changed = False
+            for r in rects:
+                if r.intersects(grown) and not (grown.x0 <= r.x0 and grown.y0 <= r.y0
+                                                and grown.x1 >= r.x1 and grown.y1 >= r.y1):
+                    grown |= r
+                    changed = True
+        if abs(grown) <= max_area:
+            page.layout_information[i] = list(grown) + [box[4]]
+
+
+_orig_clean_pictures = _pymupdf4llm_utils.clean_pictures
+
+
+def _clean_pictures_patched(page, blocks):
+    _orig_clean_pictures(page, blocks)
+    _expand_pictures(page)
+
+
+_pymupdf4llm_utils.clean_pictures = _clean_pictures_patched
 
 
 def parse_pages(spec: str) -> list[int]:
