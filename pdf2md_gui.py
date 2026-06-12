@@ -57,6 +57,10 @@ class App(TkinterDnD.Tk):
         ttk.Checkbutton(opts, text="画像を抽出する（images/ フォルダに保存）",
                         variable=self.var_images).pack(anchor="w", padx=8, pady=4)
 
+        self.var_no_ocr = tk.BooleanVar(value=False)
+        ttk.Checkbutton(opts, text="OCRを使わない（変換結果に謎の文字が混入する場合に）",
+                        variable=self.var_no_ocr).pack(anchor="w", padx=8, pady=(0, 4))
+
         out_row = ttk.Frame(opts)
         out_row.pack(fill="x", padx=8, pady=(0, 8))
         ttk.Label(out_row, text="出力先:").pack(side="left")
@@ -126,16 +130,17 @@ class App(TkinterDnD.Tk):
         outdir = self.var_outdir.get().strip()
         threading.Thread(
             target=self._convert_worker,
-            args=(list(self.files), Path(outdir) if outdir else None, self.var_images.get()),
+            args=(list(self.files), Path(outdir) if outdir else None,
+                  self.var_images.get(), not self.var_no_ocr.get()),
             daemon=True,
         ).start()
 
-    def _convert_worker(self, files: list[Path], outdir: Path | None, images: bool):
+    def _convert_worker(self, files: list[Path], outdir: Path | None, images: bool, ocr: bool):
         ok = 0
         for pdf in files:
             out_path = (outdir or pdf.parent) / f"{pdf.stem}.md"
             try:
-                convert(pdf, out_path, images=images, pages=None)
+                convert(pdf, out_path, images=images, pages=None, ocr=ocr)
                 self.log_queue.put(f"✓ {pdf.name} → {out_path}")
                 ok += 1
             except Exception as e:

@@ -47,6 +47,9 @@ Finderで **PDF-to-MD.command** をダブルクリックすると起動します
 
 # ページ範囲を指定して変換
 .venv/bin/python pdf2md.py input.pdf --pages 1-5,8
+
+# OCRを無効にして変換
+.venv/bin/python pdf2md.py input.pdf --no-ocr
 ```
 
 ## オプション
@@ -56,6 +59,11 @@ Finderで **PDF-to-MD.command** をダブルクリックすると起動します
 | `-o, --output` | 出力先（`.md` ファイル、またはフォルダ） |
 | `--images` | 画像をPNGとして抽出し、Markdownからリンクする |
 | `--pages` | 変換するページ（例: `1-5,8,10-12`）。省略時は全ページ |
+| `--no-ocr` | OCRを無効にする |
+
+### OCRについて
+
+pymupdf4llmは「画像の中に文字がありそう」と判断したページを自動でOCRします。テキスト層が正常なPDFでもロゴ画像などが原因でOCRが誤発動し、変換結果に謎の文字（添字や記号の誤認識）が混入することがあります。その場合は `--no-ocr`（GUIでは「OCRを使わない」チェック）を指定してください。
 
 ## ライセンス
 

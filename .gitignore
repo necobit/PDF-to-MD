@@ -9,3 +9,6 @@ __pycache__/
 # 変換出力（リポジトリ内でsample.pdfを変換した場合）
 sample.md
 images/
+
+# ローカルのテスト用PDF置き場（第三者の著作物を含むため公開しない）
+sample/

@@ -10,8 +10,10 @@
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 import pymupdf4llm
 
@@ -29,8 +31,9 @@ def parse_pages(spec: str) -> list[int]:
     return pages
 
 
-def convert(pdf_path: Path, out_path: Path, *, images: bool, pages: list[int] | None) -> None:
-    kwargs: dict = {}
+def convert(pdf_path: Path, out_path: Path, *, images: bool, pages: list[int] | None,
+            ocr: bool = True) -> None:
+    kwargs: dict = {"use_ocr": ocr}
     if pages is not None:
         kwargs["pages"] = pages
     if images:
@@ -44,9 +47,14 @@ def convert(pdf_path: Path, out_path: Path, *, images: bool, pages: list[int] | 
 
     md_text = pymupdf4llm.to_markdown(str(pdf_path), **kwargs)
     if images:
-        # 画像リンクを出力先からの相対パスに直す
-        md_text = md_text.replace(f"]({image_dir.resolve()}/", "](images/")
-        md_text = md_text.replace(f"]({image_dir}/", "](images/")
+        # pymupdf4llmの画像リンクはカレントディレクトリ基準のパスになるため、
+        # 実在ファイルをファイル名で照合して出力先からの相対パスに書き直す
+        def _relink(m: re.Match) -> str:
+            name = m.group(1).rsplit("/", 1)[-1]
+            if (image_dir / unquote(name)).exists():
+                return f"](images/{name})"
+            return m.group(0)
+        md_text = re.sub(r"\]\(([^)]+?\.png)\)", _relink, md_text)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(md_text, encoding="utf-8")
     print(f"✓ {pdf_path.name} → {out_path}")
@@ -65,6 +73,8 @@ def main() -> int:
                         help="画像を抽出して images/ フォルダに保存し、Markdownからリンクする")
     parser.add_argument("--pages", type=str, default=None,
                         help="変換するページ（例: 1-5,8,10-12）。省略時は全ページ")
+    parser.add_argument("--no-ocr", action="store_true",
+                        help="OCRを無効にする（テキスト層のあるPDFで謎文字が混入する場合に）")
     args = parser.parse_args()
 
     if not args.input.exists():
@@ -82,7 +92,8 @@ def main() -> int:
         failed = 0
         for pdf in pdfs:
             try:
-                convert(pdf, out_dir / f"{pdf.stem}.md", images=args.images, pages=pages)
+                convert(pdf, out_dir / f"{pdf.stem}.md", images=args.images, pages=pages,
+                        ocr=not args.no_ocr)
             except Exception as e:
                 print(f"✗ {pdf.name}: {e}", file=sys.stderr)
                 failed += 1
@@ -95,7 +106,7 @@ def main() -> int:
     else:
         out_path = args.output or args.input.with_suffix(".md")
     try:
-        convert(args.input, out_path, images=args.images, pages=pages)
+        convert(args.input, out_path, images=args.images, pages=pages, ocr=not args.no_ocr)
     except Exception as e:
         print(f"✗ 変換失敗: {e}", file=sys.stderr)
         return 1
